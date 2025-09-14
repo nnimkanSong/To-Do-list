@@ -7,10 +7,12 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Eye, EyeOff } from "lucide-react";
 import { TermsDialog } from "@/components/ui/TermsDialog";
+import { useRouter } from "next/navigation";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function suggestEmailDomain(email: string) {
+
     if (!email.includes("@")) return null;
     const [local, domain] = email.split("@");
     if (!domain) return null;
@@ -40,6 +42,8 @@ function passwordChecks(pw: string) {
 }
 
 export default function RegisterForm() {
+    const router = useRouter();
+
     const emailId = useId();
     const passwordId = useId();
     const confirmId = useId();
@@ -71,6 +75,10 @@ export default function RegisterForm() {
         const s = suggestEmailDomain(email.trim());
         setEmailSuggestion(s && s !== email.trim() ? s : null);
     }, [email]);
+    useEffect(() => {
+        setCooldown(0);
+        setEmailSent(null);
+    }, [email]);
 
     useEffect(() => {
         if (cooldown <= 0) return;
@@ -101,7 +109,7 @@ export default function RegisterForm() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email: value }),
             });
-            
+
             if (!res.ok) throw new Error("Send failed");
             setEmailSent("sent");
             setCooldown(60);
@@ -127,7 +135,12 @@ export default function RegisterForm() {
                     password,
                     verificationToken: verifToken,
                 }),
-            });
+            })
+            localStorage.removeItem("email_verif_token");
+            localStorage.removeItem("email_verif_email");
+
+            // ✅ เด้งไปหน้า login (แนบ query ไว้โชว์ข้อความก็ได้)
+            router.push("/login");
             if (!res.ok) {
                 const j = await res.json().catch(() => ({}));
                 throw new Error(j?.error || "Register failed");
@@ -142,138 +155,141 @@ export default function RegisterForm() {
             setSubmitting(false);
         }
     }
-    
+
     return (
-        <form onSubmit={onSubmit} className="w-full max-w-sm space-y-4">
-            {/* Email */}
-            <div className="space-y-2">
-                <Label htmlFor={emailId}>Email address</Label>
-                <div className="flex gap-2 items-center">
-                    <Input
-                        id={emailId}
-                        className="flex-1"
-                        placeholder="you@example.com"
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                        aria-invalid={email.length > 0 && !EMAIL_RE.test(email)}
-                    />
-                    <Button
-                        variant="outline"
-                        type="button"
-                        onClick={handleSendVerify}
-                        disabled={cooldown > 0 || emailSent === "sending"}
-                    >
-                        {emailVerified ? "Verified ✓" :
-                            emailSent === "sending" ? "Sending..." :
-                                cooldown > 0 ? `Resend (${cooldown}s)` :
-                                    emailSent === "sent" ? "Resend" : "Send"}
-                    </Button>
+        <div className="flex min-h-screen flex-col items-center justify-center p-24">
+
+            <form onSubmit={onSubmit} className="w-full max-w-sm space-y-4 ">
+                {/* Email */}
+                <div className="space-y-2">
+                    <Label htmlFor={emailId}>Email address</Label>
+                    <div className="flex gap-2 items-center">
+                        <Input
+                            id={emailId}
+                            className="flex-1"
+                            placeholder="you@example.com"
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
+                            aria-invalid={email.length > 0 && !EMAIL_RE.test(email)}
+                        />
+                        <Button
+                            variant="outline"
+                            type="button"
+                            onClick={handleSendVerify}
+                            disabled={cooldown > 0 || emailSent === "sending"}
+                        >
+                            {emailVerified ? "Verified ✓" :
+                                emailSent === "sending" ? "Sending..." :
+                                    cooldown > 0 ? `Resend (${cooldown}s)` :
+                                        emailSent === "sent" ? "Resend" : "Send"}
+                        </Button>
+                    </div>
+                    {emailSuggestion && (
+                        <div className="text-xs">
+                            คุณหมายถึง{" "}
+                            <button
+                                type="button"
+                                className="underline underline-offset-4"
+                                onClick={() => setEmail(emailSuggestion)}
+                            >
+                                {emailSuggestion}
+                            </button>{" "}
+                            หรือไม่?
+                        </div>
+                    )}
                 </div>
-                {emailSuggestion && (
-                    <div className="text-xs">
-                        คุณหมายถึง{" "}
+
+                {/* Password */}
+                <div className="space-y-2">
+                    <Label htmlFor={passwordId}>Password</Label>
+                    <div className="relative">
+                        <Input
+                            id={passwordId}
+                            className="pe-9"
+                            placeholder="Password"
+                            type={showPwd ? "text" : "password"}
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                            aria-invalid={!strongEnough}
+                        />
                         <button
                             type="button"
-                            className="underline underline-offset-4"
-                            onClick={() => setEmail(emailSuggestion)}
+                            onClick={() => setShowPwd(v => !v)}
+                            aria-label={showPwd ? "Hide password" : "Show password"}
+                            aria-controls={passwordId}
+                            className="absolute inset-y-0 end-0 flex h-full w-9 items-center justify-center text-muted-foreground/80 hover:text-foreground"
                         >
-                            {emailSuggestion}
-                        </button>{" "}
-                        หรือไม่?
+                            {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
                     </div>
-                )}
-            </div>
-
-            {/* Password */}
-            <div className="space-y-2">
-                <Label htmlFor={passwordId}>Password</Label>
-                <div className="relative">
-                    <Input
-                        id={passwordId}
-                        className="pe-9"
-                        placeholder="Password"
-                        type={showPwd ? "text" : "password"}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                        aria-invalid={!strongEnough}
-                    />
-                    <button
-                        type="button"
-                        onClick={() => setShowPwd(v => !v)}
-                        aria-label={showPwd ? "Hide password" : "Show password"}
-                        aria-controls={passwordId}
-                        className="absolute inset-y-0 end-0 flex h-full w-9 items-center justify-center text-muted-foreground/80 hover:text-foreground"
-                    >
-                        {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                </div>
-                {/* Strength meter */}
-                <div className="space-y-1">
-                    <div className="h-1 w-full rounded bg-muted">
-                        <div className="h-1 rounded bg-primary transition-all" style={{ width: `${(passed / total) * 100}%` }} />
+                    {/* Strength meter */}
+                    <div className="space-y-1">
+                        <div className="h-1 w-full rounded bg-muted">
+                            <div className="h-1 rounded bg-primary transition-all" style={{ width: `${(passed / total) * 100}%` }} />
+                        </div>
+                        <ul className="text-xs grid gap-1">
+                            {items.map((c, i) => (
+                                <li key={i} className={c.ok ? "text-foreground" : "text-muted-foreground"}>
+                                    {c.ok ? "✓" : "•"} {c.label}
+                                </li>
+                            ))}
+                        </ul>
                     </div>
-                    <ul className="text-xs grid gap-1">
-                        {items.map((c, i) => (
-                            <li key={i} className={c.ok ? "text-foreground" : "text-muted-foreground"}>
-                                {c.ok ? "✓" : "•"} {c.label}
-                            </li>
-                        ))}
-                    </ul>
                 </div>
-            </div>
 
-            {/* Confirm */}
-            <div className="space-y-2">
-                <Label htmlFor={confirmId}>Confirm Password</Label>
-                <div className="relative">
-                    <Input
-                        id={confirmId}
-                        className="pe-9"
-                        placeholder="Confirm password"
-                        type={showConfirm ? "text" : "password"}
-                        value={confirm}
-                        onChange={(e) => setConfirm(e.target.value)}
-                        required
-                        aria-invalid={!passwordsMatch}
+                {/* Confirm */}
+                <div className="space-y-2">
+                    <Label htmlFor={confirmId}>Confirm Password</Label>
+                    <div className="relative">
+                        <Input
+                            id={confirmId}
+                            className="pe-9"
+                            placeholder="Confirm password"
+                            type={showConfirm ? "text" : "password"}
+                            value={confirm}
+                            onChange={(e) => setConfirm(e.target.value)}
+                            required
+                            aria-invalid={!passwordsMatch}
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowConfirm(v => !v)}
+                            aria-label={showConfirm ? "Hide confirm password" : "Show confirm password"}
+                            aria-controls={confirmId}
+                            className="absolute inset-y-0 end-0 flex h-full w-9 items-center justify-center text-muted-foreground/80 hover:text-foreground"
+                        >
+                            {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                    </div>
+                    {!passwordsMatch && <p className="text-xs text-destructive/90">Passwords do not match.</p>}
+                </div>
+
+                {/* Terms */}
+                <div className="flex items-start gap-2">
+                    <Checkbox
+                        id={termsId}
+                        checked={accepted}
+                        onCheckedChange={(v) => setAccepted(v === true)}
+                        aria-invalid={!accepted}
                     />
-                    <button
-                        type="button"
-                        onClick={() => setShowConfirm(v => !v)}
-                        aria-label={showConfirm ? "Hide confirm password" : "Show confirm password"}
-                        aria-controls={confirmId}
-                        className="absolute inset-y-0 end-0 flex h-full w-9 items-center justify-center text-muted-foreground/80 hover:text-foreground"
-                    >
-                        {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
+                    <Label htmlFor={termsId} className="text-sm leading-6">
+                        I agree to the <TermsDialog>Terms of Service</TermsDialog>
+                    </Label>
                 </div>
-                {!passwordsMatch && <p className="text-xs text-destructive/90">Passwords do not match.</p>}
-            </div>
+                {!accepted && <p className="text-xs text-destructive/90">You must accept the Terms to continue.</p>}
 
-            {/* Terms */}
-            <div className="flex items-start gap-2">
-                <Checkbox
-                    id={termsId}
-                    checked={accepted}
-                    onCheckedChange={(v) => setAccepted(v === true)}
-                    aria-invalid={!accepted}
-                />
-                <Label htmlFor={termsId} className="text-sm leading-6">
-                    I agree to the <TermsDialog>Terms of Service</TermsDialog>
-                </Label>
-            </div>
-            {!accepted && <p className="text-xs text-destructive/90">You must accept the Terms to continue.</p>}
-
-            {/* Submit */}
-            <Button
-                type="submit"
-                className="w-full"
-                disabled={!accepted || !passwordsMatch || !strongEnough || !emailVerified || submitting}
-            >
-                {submitting ? "Registering..." : "Register"}
-            </Button>
-        </form>
+                {/* Submit */}
+                <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={!accepted || !passwordsMatch || !strongEnough || !emailVerified || submitting}
+                >
+                    {submitting ? "Registering..." : "Register"}
+                </Button>
+            </form>
+        </div>
     );
 }

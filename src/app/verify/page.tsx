@@ -37,7 +37,7 @@ export default function VerifyPage() {
     <div className="p-8 space-y-4">
       <h1 className="text-xl font-semibold">Email verified</h1>
       <p>{email}</p>
-      <Button onClick={() => router.push("/")}>Back</Button>
+      <Button onClick={() => router.push("/register")}>Back</Button>
     </div>
   );
 }
