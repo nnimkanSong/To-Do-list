@@ -1,33 +1,67 @@
+// app/verify/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
-export default function VerifyPage() {
+function VerifyInner() {
   const sp = useSearchParams();
   const router = useRouter();
   const token = sp.get("token");
-  const [status, setStatus] = useState<"checking"|"ok"|"bad">("checking");
+
+  const [status, setStatus] = useState<"checking" | "ok" | "bad">("checking");
   const [email, setEmail] = useState("");
 
+  // กัน race: ใช้ ref เก็บ token ล่าสุด
+  const latestTokenRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!token) { setStatus("bad"); return; }
+    if (!token) {
+      setStatus("bad");
+      return;
+    }
+    latestTokenRef.current = token;
+
+    const ac = new AbortController();
+
     (async () => {
-      const res = await fetch("/api/auth/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
-      });
-      if (!res.ok) { setStatus("bad"); return; }
-      const j = await res.json();
-      if (j.ok) {
-        localStorage.setItem("email_verif_token", token);
-        localStorage.setItem("email_verif_email", j.email);
-        setEmail(j.email);
-        setStatus("ok");
-      } else setStatus("bad");
+      try {
+        const res = await fetch("/api/auth/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+          signal: ac.signal,
+        });
+
+        if (!res.ok) {
+          setStatus("bad");
+          return;
+        }
+
+        type VerifyResponse = { ok: true; email: string } | { ok: false; error?: string };
+        const j = (await res.json()) as VerifyResponse;
+
+        // ตรวจว่า token ที่ตอบกลับตรงกับ token ล่าสุด (กันกรณี search params เปลี่ยน)
+        if (latestTokenRef.current !== token) return;
+
+        if (j && "ok" in j && j.ok === true) {
+          localStorage.setItem("email_verif_token", token);
+          localStorage.setItem("email_verif_email", j.email);
+          setEmail(j.email);
+          setStatus("ok");
+        } else {
+          setStatus("bad");
+        }
+      } catch (e: unknown) {
+        if ((e as { name?: string })?.name === "AbortError") return;
+        setStatus("bad");
+      }
     })();
+
+    return () => {
+      ac.abort();
+    };
   }, [token]);
 
   if (status === "checking") return <div className="p-8">Verifying...</div>;
@@ -39,5 +73,13 @@ export default function VerifyPage() {
       <p>{email}</p>
       <Button onClick={() => router.push("/register")}>Back</Button>
     </div>
+  );
+}
+
+export default function VerifyPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Loading…</div>}>
+      <VerifyInner />
+    </Suspense>
   );
 }
