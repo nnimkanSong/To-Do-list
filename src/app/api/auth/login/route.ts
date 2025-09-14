@@ -1,22 +1,54 @@
+// app/api/login/route.ts
 import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/mongoose";
 import { User } from "@/model/user";
 import bcrypt from "bcryptjs";
 import { SignJWT } from "jose";
 
+export const runtime = "nodejs"; // กัน edge runtime ที่ใช้ bcrypt ไม่ได้
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type LoginBody = {
+  email: string;
+  password: string;
+};
+
+type UserLean = {
+  _id: string;
+  email: string;
+  passwordHash: string;
+};
+
+function isLoginBody(x: unknown): x is LoginBody {
+  if (typeof x !== "object" || x === null) return false;
+  const o = x as Record<string, unknown>;
+  return typeof o.email === "string" && typeof o.password === "string";
+}
 
 export async function POST(req: Request) {
   try {
-    const { email, password } = (await req.json()) as { email?: string; password?: string };
+    const raw = (await req.json()) as unknown;
 
-    if (!email || !password || !EMAIL_RE.test(email)) {
+    if (!isLoginBody(raw)) {
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 400 });
+    }
+
+    const email = raw.email.trim().toLowerCase();
+    const password = raw.password;
+
+    if (!EMAIL_RE.test(email) || password.length === 0) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 400 });
     }
 
     await dbConnect();
 
-    const user = await User.findOne({ email: email.toLowerCase() }).lean();
+    const user = await User.findOne({ email })
+      .select("_id email passwordHash")
+      .lean<UserLean>()
+      .exec();
+
+    // ไม่บอกว่า email หรือ password ผิด เพื่อลดข้อมูลรั่ว
     if (!user) {
       return NextResponse.json({ error: "Email or password is incorrect" }, { status: 401 });
     }
@@ -26,13 +58,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Email or password is incorrect" }, { status: 401 });
     }
 
-    // (ทางเลือก) บังคับต้อง verify email ก่อน
-    // if (!user.emailVerified) {
-    //   return NextResponse.json({ error: "Please verify your email first." }, { status: 403 });
-    // }
+    const secretEnv = process.env.JWT_SECRET;
+    if (!secretEnv) {
+      // หยุดทันทีถ้าไม่มี secret (อย่าใช้ default ในโปรดักชัน)
+      return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
+    }
+    const secret = new TextEncoder().encode(secretEnv);
 
-    // ออก session token แบบง่ายด้วย jose (JWT ลง cookie)
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET || "devsecret");
     const token = await new SignJWT({ sub: String(user._id), email: user.email })
       .setProtectedHeader({ alg: "HS256" })
       .setIssuedAt()
@@ -48,8 +80,9 @@ export async function POST(req: Request) {
       maxAge: 60 * 60 * 24 * 7, // 7 วัน
     });
     return res;
-  } catch (e) {
-    console.error("[login] ", e);
+  } catch (e: unknown) {
+    // ไม่ใช้ `any` ใน catch; แคบ type ให้ถูกต้อง
+    console.error("[login] ", e instanceof Error ? e.message : e);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
