@@ -1,6 +1,4 @@
-import Image from "next/image";
-import  Login  from "@/components/login-form";
-import  RegisterForm  from "@/components/register-form";
+
 export default function Home() {
   return (
     
