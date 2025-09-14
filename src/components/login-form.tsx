@@ -41,11 +41,16 @@ export default function LoginForm() {
 
       // ล็อกอินสำเร็จ → ไปหน้า dashboard (หรือหน้าอื่นตามต้องการ)
       router.replace("/");
-    } catch (err: any) {
-      alert(err.message || "เข้าสู่ระบบไม่สำเร็จ");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        alert(err.message);
+      } else {
+        alert("เข้าสู่ระบบไม่สำเร็จ");
+      }
     } finally {
       setSubmitting(false);
     }
+
   }
 
   const disabled = submitting || !EMAIL_RE.test(email.trim()) || password.length === 0;

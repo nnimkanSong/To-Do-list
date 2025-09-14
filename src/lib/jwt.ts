@@ -1,4 +1,3 @@
-import jwt from "jsonwebtoken";
 import { sign, verify, type SignOptions, type JwtPayload } from "jsonwebtoken";
 const SECRET = process.env.JWT_SECRET!;
 if (!SECRET) throw new Error("Missing JWT_SECRET");

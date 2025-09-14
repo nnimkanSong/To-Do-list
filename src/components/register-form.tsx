@@ -149,11 +149,16 @@ export default function RegisterForm() {
             // เคลียร์ token เพื่อกันใช้ซ้ำ
             localStorage.removeItem("email_verif_token");
             localStorage.removeItem("email_verif_email");
-        } catch (e: any) {
-            alert(e.message || "สมัครไม่สำเร็จ");
+        } catch (e: unknown) {
+            if (e instanceof Error) {
+                alert(e.message);
+            } else {
+                alert("สมัครไม่สำเร็จ");
+            }
         } finally {
             setSubmitting(false);
         }
+
     }
 
     return (
