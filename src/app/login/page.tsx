@@ -1,14 +1,12 @@
-// app/login/page.tsx  (ไม่มี "use client")
+"use client";
+
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import LoginForm from "@/components/login-form";
 
-export default function LoginPage({
-  searchParams,
-}: {
-  searchParams?: { [k: string]: string | string[] | undefined };
-}) {
-  const r = searchParams?.registered;
-  const justRegistered =
-    typeof r === "string" ? r === "1" : Array.isArray(r) ? r[0] === "1" : false;
+function LoginInner() {
+  const sp = useSearchParams();
+  const justRegistered = sp.get("registered") === "1";
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-24">
@@ -20,5 +18,13 @@ export default function LoginPage({
       <h1 className="text-xl font-semibold">Login</h1>
       <LoginForm />
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<main className="p-24">กำลังโหลด...</main>}>
+      <LoginInner />
+    </Suspense>
   );
 }
