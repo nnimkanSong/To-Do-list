@@ -23,15 +23,20 @@ export async function POST(req: NextRequest) {
     });
 
     // ใช้ APP_URL ถ้ามี; ไม่มีก็ใช้ origin จากคำขอ
-    const origin = process.env.APP_URL ?? req.nextUrl.origin ?? "http://localhost:3000";
+    const origin =
+      process.env.APP_URL ?? req.nextUrl.origin ?? "http://localhost:3000";
     const url = new URL("/verify", origin);
     url.searchParams.set("token", token);
     const link = url.toString();
 
     await sendVerificationEmail(email, link);
     return NextResponse.json({ ok: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[send-verification]", err);
-    return NextResponse.json({ error: err?.message ?? "Internal Server Error" }, { status: 500 });
+
+    const message =
+      err instanceof Error ? err.message : "Internal Server Error";
+
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

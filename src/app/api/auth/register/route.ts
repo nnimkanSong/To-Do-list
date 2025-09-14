@@ -30,14 +30,23 @@ export async function POST(req: Request) {
     // ตรวจ token และอีเมลต้องตรง
     let tokenEmail: string;
     try {
-      const payload = verify(verificationToken, process.env.JWT_SECRET!) as { sub: string; typ: string };
+      const payload = verify(verificationToken, process.env.JWT_SECRET!) as {
+        sub: string;
+        typ: string;
+      };
       if (payload.typ !== "email-verify") throw new Error("bad token type");
       tokenEmail = payload.sub;
     } catch {
-      return NextResponse.json({ error: "Invalid or expired token" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid or expired token" },
+        { status: 400 }
+      );
     }
     if (tokenEmail.toLowerCase() !== email.toLowerCase()) {
-      return NextResponse.json({ error: "Token/email mismatch" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Token/email mismatch" },
+        { status: 400 }
+      );
     }
 
     if (!passwordStrong(password)) {
@@ -48,7 +57,10 @@ export async function POST(req: Request) {
 
     const exists = await User.findOne({ email: email.toLowerCase() }).lean();
     if (exists) {
-      return NextResponse.json({ error: "Email already registered" }, { status: 409 });
+      return NextResponse.json(
+        { error: "Email already registered" },
+        { status: 409 }
+      );
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
@@ -61,11 +73,34 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ ok: true });
-  } catch (e: any) {
-    console.error("[register]", e?.name, e?.message, e);
-    if (e?.code === 11000) {
-      return NextResponse.json({ error: "Email already registered" }, { status: 409 });
+  } catch (e: unknown) {
+    // log ให้เห็นทั้งชื่อ/ข้อความ/ออบเจ็กต์เต็ม ๆ โดยไม่พึ่ง ?. ของ any
+    if (e instanceof Error) {
+      console.error("[register]", e.name, e.message, e);
+    } else {
+      console.error("[register] Unknown error", e);
     }
-    return NextResponse.json({ error: e?.message || "Internal Server Error" }, { status: 500 });
+
+    // เช็ค duplicate key error (Mongoose/Mongo error code 11000)
+    if (isDupKeyError(e)) {
+      return NextResponse.json(
+        { error: "Email already registered" },
+        { status: 409 }
+      );
+    }
+
+    // ข้อความ fallback ที่ปลอดภัย
+    const message = e instanceof Error ? e.message : "Internal Server Error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+
+  // ---- helpers ----
+  function isDupKeyError(err: unknown): boolean {
+    // รองรับทั้งกรณี Mongoose และ MongoDB driver
+    if (err && typeof err === "object" && "code" in err) {
+      const code = (err as { code?: unknown }).code;
+      return code === 11000;
+    }
+    return false;
   }
 }
